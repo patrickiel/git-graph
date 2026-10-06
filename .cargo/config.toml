@@ -1,4 +1,0 @@
-# Build against the den checkout next to this one, for its unreleased view API.
-# Remove once den with `den_extension::view` is pushed.
-[patch."https://github.com/patrickiel/den"]
-den-extension = { path = "../den/crates/den-extension" }
