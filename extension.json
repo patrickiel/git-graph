@@ -1,0 +1,25 @@
+{
+  "id": "git-graph",
+  "name": "Git Graph",
+  "version": "0.1.0",
+  "repository": "patrickiel/git-graph",
+  "api": 1,
+  "icon": "icon.svg",
+  "description": "The repository's commits as a graph, with branch and commit actions, like vscode-git-graph.",
+  "settings": [
+    { "key": "initial_commits", "title": "Commits to load", "description": "How many commits the graph loads at first, and how many more each Load more adds.", "type": "number", "default": 300 },
+    { "key": "show_remote_branches", "title": "Show remote branches", "description": "Show remote branches when a graph opens (the toolbar's Remotes button switches them per graph).", "type": "boolean", "default": true },
+    { "key": "show_tags", "title": "Show tags", "description": "Include commits only tags reach.", "type": "boolean", "default": true },
+    { "key": "show_uncommitted", "title": "Show uncommitted changes", "description": "A row for the uncommitted changes on top of HEAD.", "type": "boolean", "default": true },
+    { "key": "date_format", "title": "Date format", "description": "How commit dates show.", "type": "choice", "default": "relative", "options": ["relative", "absolute"] },
+    { "key": "dim_unrelated", "title": "Dim commits HEAD doesn't reach", "description": "Fade the commits that aren't ancestors of HEAD.", "type": "boolean", "default": false },
+    { "key": "title_bar_button", "title": "Title bar button", "description": "A Git Graph button in the title bar of windows on a repository (after a restart).", "type": "boolean", "default": true }
+  ],
+  "commands": [
+    { "id": "show", "title": "Show Git Graph", "keybinding": "ctrl-alt-shift-g" },
+    { "id": "fetch", "title": "Fetch from All Remotes" }
+  ],
+  "views": [
+    { "id": "graph", "title": "Git Graph", "icon": "git-fork" }
+  ]
+}
