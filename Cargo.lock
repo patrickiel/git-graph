@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "den-extension"
 version = "0.1.0"
-source = "git+https://github.com/patrickiel/den#993d97dc63934f93044cfe152c0a5486971a2b32"
+source = "git+https://github.com/patrickiel/den#4eef7496cdfcf47ef1848c98551b159e73f79639"
 dependencies = [
  "serde",
  "serde_json",
@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "git-graph"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "den-extension",
  "serde",
