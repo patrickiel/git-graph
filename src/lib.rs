@@ -842,7 +842,7 @@ fn full_content(repo: &mut Repo, config: &Config) -> Content {
         title: Some(format!("Git Graph: {}", repo.top.file_name().map_or_else(|| repo.top.display().to_string(), |n| n.to_string_lossy().into_owned()))),
         toolbar: Some(toolbar(repo, config)),
         columns: Some(vec![
-            Column { title: "Graph".into(), ..Default::default() },
+            Column { title: "Graph".into(), fixed: true, ..Default::default() },
             Column { title: "Description".into(), ..Default::default() },
             // The widths are for dens without `fit`.
             Column { title: "Date".into(), width: Some(150.), fit: true, fixed: true },
