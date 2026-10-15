@@ -20,7 +20,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime};
 
 use den_extension::view::{Column, Content, Diff, Field, Line, MenuItem, Prompt, Row, SelectOption, Span, ToolbarItem, actions};
-use den_extension::{Button, Context, Extension, Host, events, register};
+use den_extension::{Button, ButtonLocation, Context, Extension, Host, events, register};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -47,7 +47,6 @@ struct Config {
     /// `relative` or `absolute`.
     date_format: String,
     dim_unrelated: bool,
-    title_bar_button: bool,
 }
 
 impl Default for Config {
@@ -59,7 +58,6 @@ impl Default for Config {
             show_uncommitted: true,
             date_format: "relative".into(),
             dim_unrelated: false,
-            title_bar_button: true,
         }
     }
 }
@@ -197,7 +195,7 @@ impl Worker {
         let root = data["root"].as_str().unwrap_or_default().to_string();
         let text = |key: &str| data[key].as_str().map(str::to_string);
         match name {
-            events::WORKSPACE_OPENED if self.config.title_bar_button => self.set_button(&root),
+            events::WORKSPACE_OPENED => self.set_button(&root),
             events::BUTTON_CLICKED | events::COMMAND => match text("id").as_deref() {
                 Some("show") => self.show(&root),
                 Some("fetch") => self.fetch(&root),
@@ -235,7 +233,14 @@ impl Worker {
         if git::toplevel(Path::new(root)).is_none() {
             return;
         }
-        let button = Button { id: "show".into(), label: "Git Graph".into(), icon: "git-fork".into(), tooltip: "Show the Git Graph".into(), ..Default::default() };
+        let button = Button {
+            id: "show".into(),
+            label: "Git Graph".into(),
+            icon: "git-fork".into(),
+            tooltip: "Show the Git Graph".into(),
+            location: ButtonLocation::SourceControl,
+            ..Default::default()
+        };
         _ = self.host.set_buttons(root, &[button]);
     }
 
@@ -837,11 +842,12 @@ fn full_content(repo: &mut Repo, config: &Config) -> Content {
         title: Some(format!("Git Graph: {}", repo.top.file_name().map_or_else(|| repo.top.display().to_string(), |n| n.to_string_lossy().into_owned()))),
         toolbar: Some(toolbar(repo, config)),
         columns: Some(vec![
-            Column { title: "Graph".into(), width: None },
-            Column { title: "Description".into(), width: None },
-            Column { title: "Date".into(), width: Some(150.) },
-            Column { title: "Author".into(), width: Some(160.) },
-            Column { title: "Commit".into(), width: Some(80.) },
+            Column { title: "Graph".into(), ..Default::default() },
+            Column { title: "Description".into(), ..Default::default() },
+            // The widths are for dens without `fit`.
+            Column { title: "Date".into(), width: Some(150.), fit: true, fixed: true },
+            Column { title: "Author".into(), width: Some(160.), fit: true, fixed: true },
+            Column { title: "Commit".into(), width: Some(80.), fit: true, fixed: true },
         ]),
         rows: Some(rows),
         menus: Some(menus(repo)),
@@ -1057,19 +1063,19 @@ fn first_lines(text: &str) -> String {
     text.lines().filter(|l| !l.trim().is_empty()).take(3).collect::<Vec<_>>().join(" ")
 }
 
-/// `3 days ago`, as vscode-git-graph says it.
+/// `3d ago`: short, so the column stays narrow (the full date is its tooltip).
 fn relative(time: i64, now: i64) -> String {
     let seconds = (now - time).max(0);
     let (n, unit) = match seconds {
-        s if s < 60 => return "Just now".into(),
-        s if s < 3600 => (s / 60, "minute"),
-        s if s < 86_400 => (s / 3600, "hour"),
-        s if s < 604_800 => (s / 86_400, "day"),
-        s if s < 2_629_800 => (s / 604_800, "week"),
-        s if s < 31_557_600 => (s / 2_629_800, "month"),
-        s => (s / 31_557_600, "year"),
+        s if s < 60 => return "now".into(),
+        s if s < 3600 => (s / 60, "m"),
+        s if s < 86_400 => (s / 3600, "h"),
+        s if s < 604_800 => (s / 86_400, "d"),
+        s if s < 2_629_800 => (s / 604_800, "w"),
+        s if s < 31_557_600 => (s / 2_629_800, "mo"),
+        s => (s / 31_557_600, "y"),
     };
-    format!("{n} {unit}{} ago", if n == 1 { "" } else { "s" })
+    format!("{n}{unit} ago")
 }
 
 #[cfg(test)]
@@ -1087,16 +1093,17 @@ mod tests {
         assert_eq!(from_manifest.show_uncommitted, default.show_uncommitted);
         assert_eq!(from_manifest.date_format, default.date_format);
         assert_eq!(from_manifest.dim_unrelated, default.dim_unrelated);
-        assert_eq!(from_manifest.title_bar_button, default.title_bar_button);
         assert!(manifest.views.iter().any(|v| v.id == VIEW));
     }
 
     #[test]
     fn dates_read_relatively() {
-        assert_eq!(relative(100, 130), "Just now");
-        assert_eq!(relative(0, 3 * 3600), "3 hours ago");
-        assert_eq!(relative(0, 86_400), "1 day ago");
-        assert_eq!(relative(0, 2 * 31_557_600), "2 years ago");
+        assert_eq!(relative(100, 130), "now");
+        assert_eq!(relative(0, 23 * 60), "23m ago");
+        assert_eq!(relative(0, 3 * 3600), "3h ago");
+        assert_eq!(relative(0, 86_400), "1d ago");
+        assert_eq!(relative(0, 3 * 2_629_800), "3mo ago");
+        assert_eq!(relative(0, 2 * 31_557_600), "2y ago");
     }
 
     #[test]

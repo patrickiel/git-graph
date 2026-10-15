@@ -12,8 +12,7 @@
     { "key": "show_tags", "title": "Show tags", "description": "Include commits only tags reach.", "type": "boolean", "default": true },
     { "key": "show_uncommitted", "title": "Show uncommitted changes", "description": "A row for the uncommitted changes on top of HEAD.", "type": "boolean", "default": true },
     { "key": "date_format", "title": "Date format", "description": "How commit dates show.", "type": "choice", "default": "relative", "options": ["relative", "absolute"] },
-    { "key": "dim_unrelated", "title": "Dim commits HEAD doesn't reach", "description": "Fade the commits that aren't ancestors of HEAD.", "type": "boolean", "default": false },
-    { "key": "title_bar_button", "title": "Title bar button", "description": "A Git Graph button in the title bar of windows on a repository (after a restart).", "type": "boolean", "default": true }
+    { "key": "dim_unrelated", "title": "Dim commits HEAD doesn't reach", "description": "Fade the commits that aren't ancestors of HEAD.", "type": "boolean", "default": false }
   ],
   "commands": [
     { "id": "show", "title": "Show Git Graph", "keybinding": "ctrl-alt-shift-g" },

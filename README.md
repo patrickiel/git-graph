@@ -1,6 +1,6 @@
 # Git Graph
 
-The repository's commits as a graph in a tab of den, after [mhutchie's Git Graph](https://github.com/mhutchie/vscode-git-graph) for VS Code. Open it with the **Git Graph** button in the title bar, *Git Graph: Show Git Graph* in den's menu, or <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>.
+The repository's commits as a graph in a tab of den, after [mhutchie's Git Graph](https://github.com/mhutchie/vscode-git-graph) for VS Code. Open it with the **Git Graph** button (a branching icon) at the top of the Source Control panel, *Git Graph: Show Git Graph* in den's menu, or <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>.
 
 - **The graph:** every branch in a coloured lane, merges and forks as curves, HEAD as a ring, and the uncommitted changes as a dashed row on top. Branches, remote branches and tags are badges on their commits.
 - **Details:** click a commit for its hash, parents (click one to go there), author, date, message and files with their line counts. Click a file for its diff; right-click it to open it or copy its path. The uncommitted changes list their staged and unstaged files.
@@ -23,9 +23,8 @@ Push, pull, fetch and deleting on a remote run in the background; a login git as
 | **Show remote branches** | Whether a new graph shows them (the Remotes button switches it per graph) |
 | **Show tags** | Include commits only tags reach |
 | **Show uncommitted changes** | The row on top for them |
-| **Date format** | `relative` (3 days ago) or `absolute` |
+| **Date format** | `relative` (3d ago) or `absolute` |
 | **Dim commits HEAD doesn't reach** | Fade the commits that aren't ancestors of HEAD |
-| **Title bar button** | The Git Graph button (after a restart) |
 
 ## How it works
 
