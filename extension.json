@@ -1,7 +1,7 @@
 {
   "id": "git-graph",
   "name": "Git Graph",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "repository": "patrickiel/git-graph",
   "api": 1,
   "icon": "icon.svg",
