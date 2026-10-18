@@ -8,7 +8,8 @@
 //! clicks and menu picks come back as `view_action`, the answers to its
 //! questions as `prompt_answered`. A worker thread owns every repository's
 //! state and takes den's events over a channel; between them it looks for
-//! changes to the repository (a commit, a checkout, a fetch) and redraws.
+//! changes to the repository (a commit, a checkout, a fetch), and for
+//! relative dates that have moved on, and redraws.
 
 mod git;
 mod graph;
@@ -128,6 +129,8 @@ struct Repo {
     remotes: Vec<String>,
     /// Each row's lane, for its badges' colour.
     lanes: Vec<usize>,
+    /// Each commit's date as drawn.
+    dates: Vec<String>,
     search: String,
     matches: Vec<String>,
     match_ix: usize,
@@ -275,6 +278,7 @@ impl Worker {
             changes: Vec::new(),
             remotes: Vec::new(),
             lanes: Vec::new(),
+            dates: Vec::new(),
             search: String::new(),
             matches: Vec::new(),
             match_ix: 0,
@@ -304,13 +308,14 @@ impl Worker {
         _ = self.host.set_view(root, VIEW, &content);
     }
 
-    /// Redraw the open graphs whose repository changed.
+    /// Redraw the open graphs whose repository changed, or whose dates read
+    /// differently now (`5m ago` turning `6m ago`).
     fn poll(&mut self) {
         let due: Vec<String> = self.repos.values().filter(|r| r.open && r.checked.elapsed() >= POLL).map(|r| r.root.clone()).collect();
         for root in due {
             let Some(repo) = self.repos.get_mut(&root) else { continue };
             repo.checked = Instant::now();
-            if git::fingerprint(&repo.top) != repo.fingerprint {
+            if git::fingerprint(&repo.top) != repo.fingerprint || dates(&repo.commits, &self.config) != repo.dates {
                 self.reload(&root);
             }
         }
@@ -802,7 +807,7 @@ fn full_content(repo: &mut Repo, config: &Config) -> Content {
     repo.lanes = layout.lanes;
 
     let related = if config.dim_unrelated { Some(ancestors(&repo.commits, repo.head.as_deref())) } else { None };
-    let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+    repo.dates = dates(&repo.commits, config);
     let mut rows = Vec::with_capacity(nodes.len());
     let mut lanes = repo.lanes.iter();
     if uncommitted {
@@ -816,19 +821,18 @@ fn full_content(repo: &mut Repo, config: &Config) -> Content {
             ..Default::default()
         });
     }
-    for commit in &repo.commits {
+    for (commit, date) in repo.commits.iter().zip(&repo.dates) {
         let graph = graphs.next().unwrap_or_default();
         let lane = lanes.next().copied().unwrap_or(0);
         let mut description = badges(repo, &commit.hash, graph::color(lane));
         description.push(Span::text(commit.subject.clone()).tooltip(commit.subject.clone()));
-        let date = if config.date_format == "absolute" { commit.date.clone() } else { relative(commit.time, now) };
         let is_head = repo.head.as_deref() == Some(commit.hash.as_str());
         rows.push(Row {
             id: commit.hash.clone(),
             cells: vec![
                 graph.into(),
                 description.into(),
-                Span::text(date).dim().tooltip(commit.date.clone()).into(),
+                Span::text(date.clone()).dim().tooltip(commit.date.clone()).into(),
                 Span::text(commit.author.clone()).tooltip(format!("{} <{}>", commit.author, commit.email)).into(),
                 Span::text(short(&commit.hash)).mono().dim().into(),
             ],
@@ -1061,6 +1065,12 @@ fn short(hash: &str) -> String {
 /// The first few lines of git's complaint.
 fn first_lines(text: &str) -> String {
     text.lines().filter(|l| !l.trim().is_empty()).take(3).collect::<Vec<_>>().join(" ")
+}
+
+/// The commits' dates as the Date column shows them.
+fn dates(commits: &[Commit], config: &Config) -> Vec<String> {
+    let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+    commits.iter().map(|c| if config.date_format == "absolute" { c.date.clone() } else { relative(c.time, now) }).collect()
 }
 
 /// `3d ago`: short, so the column stays narrow (the full date is its tooltip).
