@@ -53,6 +53,8 @@ pub struct Commit {
     /// As git formats it in local time.
     pub date: String,
     pub subject: String,
+    /// The message past its subject.
+    pub body: String,
 }
 
 /// The date format the graph shows (git's `format-local`).
@@ -61,7 +63,7 @@ const DATE: &str = "--date=format-local:%d %b %Y %H:%M";
 /// Up to `limit` commits of `revs`, newest first (children before parents).
 pub fn log(top: &Path, revs: &[String], limit: usize) -> Result<Vec<Commit>, String> {
     let count = format!("--max-count={limit}");
-    let format = "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%ad%x1f%s%x1e";
+    let format = "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%ad%x1f%s%x1f%b%x1e";
     let mut args = vec!["log", "--date-order", count.as_str(), format, DATE];
     args.extend(revs.iter().map(String::as_str));
     args.push("--");
@@ -90,6 +92,7 @@ pub fn parse_log(out: &str) -> Vec<Commit> {
                 time: f.next()?.trim().parse().unwrap_or(0),
                 date: f.next()?.to_string(),
                 subject: f.next().unwrap_or_default().trim_end().to_string(),
+                body: f.next().unwrap_or_default().trim().to_string(),
             })
         })
         .collect()

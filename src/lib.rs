@@ -162,6 +162,12 @@ struct FileRef {
     staged: bool,
 }
 
+impl FileRef {
+    fn diff(&self) -> Diff {
+        Diff { path: self.path.clone(), hash: self.hash.clone(), parent: self.parent.clone(), old_path: self.old.clone(), staged: self.staged }
+    }
+}
+
 struct Worker {
     host: Host,
     config: Config,
@@ -432,8 +438,7 @@ impl Worker {
 
     fn open_diff(&self, root: &str, target: &str) {
         let Ok(file) = serde_json::from_str::<FileRef>(target) else { return };
-        let diff = Diff { path: file.path, hash: file.hash, parent: file.parent, old_path: file.old, staged: file.staged };
-        if let Err(err) = self.host.open_diff(root, &diff) {
+        if let Err(err) = self.host.open_diff(root, &file.diff()) {
             self.host.log(format!("open_diff: {err}"));
         }
     }
@@ -825,7 +830,11 @@ fn full_content(repo: &mut Repo, config: &Config) -> Content {
         let graph = graphs.next().unwrap_or_default();
         let lane = lanes.next().copied().unwrap_or(0);
         let mut description = badges(repo, &commit.hash, graph::color(lane));
-        description.push(Span::text(commit.subject.clone()).tooltip(commit.subject.clone()));
+        // The whole message on hover, not only what fits.
+        let message = if commit.body.is_empty() { commit.subject.clone() } else { format!("{}
+
+{}", commit.subject, commit.body) };
+        description.push(Span::text(commit.subject.clone()).tooltip(message));
         let is_head = repo.head.as_deref() == Some(commit.hash.as_str());
         rows.push(Row {
             id: commit.hash.clone(),
@@ -989,26 +998,34 @@ fn detail(repo: &Repo, selected: &str) -> Vec<Line> {
         Ok(details) => details,
         Err(err) => return vec![Line::new(vec![Span::text(format!("Couldn't read the commit: {}", first_lines(&err))).color("#f14c4c")])],
     };
-    let field = |name: &str, value: Vec<Span>| {
-        let mut spans = vec![Span::text(format!("{name}:")).dim()];
-        spans.extend(value);
-        Line::new(spans)
-    };
-    let mut lines = vec![field("Commit", vec![Span::text(commit.hash.clone()).mono().action("copy-hash", commit.hash.clone()).tooltip("Copy")])];
-    if !commit.parents.is_empty() {
-        lines.push(field("Parents", commit.parents.iter().map(|p| Span::text(short(p)).mono().color("#3794ff").action("goto", p.clone()).tooltip("Go to this commit")).collect()));
-    }
-    lines.push(field("Author", vec![Span::text(format!("{} <{}>", commit.author, commit.email))]));
-    lines.push(field("Date", vec![Span::text(commit.date.clone())]));
+    // The subject, then who, when and which commit in one quiet line.
+    let mut lines = vec![Line::new(vec![Span::text(commit.subject.clone()).bold()])];
+    let dot = || Span::text("·").dim();
+    let mut meta = vec![
+        Span::text(commit.author.clone()).dim().tooltip(format!("{} <{}>", commit.author, commit.email)),
+        dot(),
+        Span::text(commit.date.clone()).dim(),
+    ];
     if details.committer != commit.author || details.committer_email != commit.email {
-        lines.push(field("Committer", vec![Span::text(format!("{} <{}>, {}", details.committer, details.committer_email, details.commit_date))]));
+        meta.extend([dot(), Span::text(format!("committed by {}", details.committer)).dim().tooltip(format!("{} <{}>, {}", details.committer, details.committer_email, details.commit_date))]);
     }
+    meta.extend([dot(), Span::text(short(&commit.hash)).mono().dim().action("copy-hash", commit.hash.clone()).tooltip(format!("{}: click to copy", commit.hash))]);
+    if !commit.parents.is_empty() {
+        meta.extend([dot(), Span::text(if commit.parents.len() == 1 { "parent" } else { "parents" }).dim()]);
+        meta.extend(commit.parents.iter().map(|p| Span::text(short(p)).mono().color("#3794ff").action("goto", p.clone()).tooltip("Go to this commit")));
+    }
+    lines.push(Line::new(meta));
     let lane = repo.commits.iter().position(|c| c.hash == commit.hash).map(|ix| ix + usize::from(!repo.changes.is_empty() && repo.head.is_some()));
     let badges = badges(repo, &commit.hash, graph::color(lane.and_then(|ix| repo.lanes.get(ix)).copied().unwrap_or(0)));
     if !badges.is_empty() {
         lines.push(Line::new(badges));
     }
-    lines.push(Line { spans: vec![Span::text(details.body.clone())], heading: true, ..Default::default() });
+    // The message past its subject, after a blank line as in the commit.
+    let body = details.body.split_once("\n\n").map_or("", |(_, rest)| rest.trim());
+    if !body.is_empty() {
+        lines.push(Line::new(Vec::new()));
+        lines.push(Line::new(vec![Span::text(body)]));
+    }
     let (added, deleted) = details.files.iter().fold((0, 0), |(a, d), f| (a + f.added.unwrap_or(0), d + f.deleted.unwrap_or(0)));
     let count = details.files.len();
     lines.push(Line::heading(format!("{count} file{} changed, +{added} −{deleted}", if count == 1 { "" } else { "s" })));
@@ -1054,8 +1071,10 @@ fn file_line(status: char, path: &str, old: Option<&str>, counts: Option<(u64, u
         spans.push(Span::text(format!("+{added}")).color("#73c991"));
         spans.push(Span::text(format!("−{deleted}")).color("#f14c4c"));
     }
+    // A click shows the change beside the details; a double-click opens it in a tab.
+    let diff = data.diff();
     let data = serde_json::to_string(&data).unwrap_or_default();
-    Line::new(spans).action("diff", data).menu("file")
+    Line::new(spans).action("diff", data).menu("file").diff(diff)
 }
 
 fn short(hash: &str) -> String {
@@ -1126,6 +1145,7 @@ mod tests {
             time: 0,
             date: String::new(),
             subject: String::new(),
+            body: String::new(),
         };
         let commits = [commit("x", &["a"]), commit("m", &["a", "b"]), commit("b", &["a"]), commit("a", &[])];
         let reached = ancestors(&commits, Some("m"));
