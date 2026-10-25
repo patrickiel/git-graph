@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "den-extension"
 version = "0.1.0"
-source = "git+https://github.com/patrickiel/den#5172d3ad235852829ba568a3496a3372eb3363b7"
+source = "git+https://github.com/patrickiel/den#0d2de4c284978c289f39b0f13fd2fcd3204e5bb5"
 dependencies = [
  "serde",
  "serde_json",
