@@ -813,15 +813,21 @@ fn full_content(repo: &mut Repo, config: &Config) -> Content {
 
     let related = if config.dim_unrelated { Some(ancestors(&repo.commits, repo.head.as_deref())) } else { None };
     repo.dates = dates(&repo.commits, config);
+    let show_author = several_authors(&repo.commits);
     let mut rows = Vec::with_capacity(nodes.len());
     let mut lanes = repo.lanes.iter();
     if uncommitted {
         let graph = graphs.next().unwrap_or_default();
         lanes.next();
         let text = format!("Uncommitted Changes ({})", repo.changes.len());
+        let mut cells = vec![graph.into(), Span::text(text).italic().into(), Span::text("").into()];
+        if show_author {
+            cells.push(Span::text("*").dim().into());
+        }
+        cells.push(Span::text("*").dim().mono().into());
         rows.push(Row {
             id: UNCOMMITTED.into(),
-            cells: vec![graph.into(), Span::text(text).italic().into(), Span::text("").into(), Span::text("*").dim().into(), Span::text("*").dim().mono().into()],
+            cells,
             menu: "uncommitted".into(),
             ..Default::default()
         });
@@ -836,32 +842,34 @@ fn full_content(repo: &mut Repo, config: &Config) -> Content {
 {}", commit.subject, commit.body) };
         description.push(Span::text(commit.subject.clone()).tooltip(message));
         let is_head = repo.head.as_deref() == Some(commit.hash.as_str());
+        let mut cells = vec![graph.into(), description.into(), Span::text(date.clone()).dim().tooltip(commit.date.clone()).into()];
+        if show_author {
+            cells.push(Span::text(commit.author.clone()).tooltip(format!("{} <{}>", commit.author, commit.email)).into());
+        }
+        cells.push(Span::text(short(&commit.hash)).mono().dim().into());
         rows.push(Row {
             id: commit.hash.clone(),
-            cells: vec![
-                graph.into(),
-                description.into(),
-                Span::text(date.clone()).dim().tooltip(commit.date.clone()).into(),
-                Span::text(commit.author.clone()).tooltip(format!("{} <{}>", commit.author, commit.email)).into(),
-                Span::text(short(&commit.hash)).mono().dim().into(),
-            ],
+            cells,
             menu: "commit".into(),
             bold: is_head,
             dim: related.as_ref().is_some_and(|r| !r.contains(commit.hash.as_str())),
         });
     }
     let message = if rows.is_empty() { "No commits yet." } else { "" };
+    let mut columns = vec![
+        Column { title: "Graph".into(), fixed: true, ..Default::default() },
+        Column { title: "Description".into(), ..Default::default() },
+        // The widths are for dens without `fit`.
+        Column { title: "Date".into(), width: Some(150.), fit: true, fixed: true },
+    ];
+    if show_author {
+        columns.push(Column { title: "Author".into(), width: Some(160.), fit: true, fixed: true });
+    }
+    columns.push(Column { title: "Commit".into(), width: Some(80.), fit: true, fixed: true });
     Content {
         title: Some(format!("Git Graph: {}", repo.top.file_name().map_or_else(|| repo.top.display().to_string(), |n| n.to_string_lossy().into_owned()))),
         toolbar: Some(toolbar(repo, config)),
-        columns: Some(vec![
-            Column { title: "Graph".into(), fixed: true, ..Default::default() },
-            Column { title: "Description".into(), ..Default::default() },
-            // The widths are for dens without `fit`.
-            Column { title: "Date".into(), width: Some(150.), fit: true, fixed: true },
-            Column { title: "Author".into(), width: Some(160.), fit: true, fixed: true },
-            Column { title: "Commit".into(), width: Some(80.), fit: true, fixed: true },
-        ]),
+        columns: Some(columns),
         rows: Some(rows),
         menus: Some(menus(repo)),
         selected: Some(repo.selected.clone().unwrap_or_default()),
@@ -1086,25 +1094,32 @@ fn first_lines(text: &str) -> String {
     text.lines().filter(|l| !l.trim().is_empty()).take(3).collect::<Vec<_>>().join(" ")
 }
 
+/// Whether the commits name more than one author: one name on every row says
+/// nothing, so the Author column goes.
+fn several_authors(commits: &[Commit]) -> bool {
+    commits.windows(2).any(|c| c[0].author != c[1].author)
+}
+
 /// The commits' dates as the Date column shows them.
 fn dates(commits: &[Commit], config: &Config) -> Vec<String> {
     let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
-    commits.iter().map(|c| if config.date_format == "absolute" { c.date.clone() } else { relative(c.time, now) }).collect()
+    commits
+        .iter()
+        .map(|c| if config.date_format == "absolute" { c.date.clone() } else { relative(c.time, now).unwrap_or_else(|| c.short_date.clone()) })
+        .collect()
 }
 
-/// `3d ago`: short, so the column stays narrow (the full date is its tooltip).
-fn relative(time: i64, now: i64) -> String {
+/// `3h ago` within the last day: short, so the column stays narrow (the full
+/// date and time are its tooltip). Older dates read better as dates.
+fn relative(time: i64, now: i64) -> Option<String> {
     let seconds = (now - time).max(0);
     let (n, unit) = match seconds {
-        s if s < 60 => return "now".into(),
+        s if s < 60 => return Some("now".into()),
         s if s < 3600 => (s / 60, "m"),
         s if s < 86_400 => (s / 3600, "h"),
-        s if s < 604_800 => (s / 86_400, "d"),
-        s if s < 2_629_800 => (s / 604_800, "w"),
-        s if s < 31_557_600 => (s / 2_629_800, "mo"),
-        s => (s / 31_557_600, "y"),
+        _ => return None,
     };
-    format!("{n}{unit} ago")
+    Some(format!("{n}{unit} ago"))
 }
 
 #[cfg(test)]
@@ -1126,27 +1141,49 @@ mod tests {
     }
 
     #[test]
-    fn dates_read_relatively() {
-        assert_eq!(relative(100, 130), "now");
-        assert_eq!(relative(0, 23 * 60), "23m ago");
-        assert_eq!(relative(0, 3 * 3600), "3h ago");
-        assert_eq!(relative(0, 86_400), "1d ago");
-        assert_eq!(relative(0, 3 * 2_629_800), "3mo ago");
-        assert_eq!(relative(0, 2 * 31_557_600), "2y ago");
+    fn dates_read_relatively_for_a_day() {
+        assert_eq!(relative(100, 130).as_deref(), Some("now"));
+        assert_eq!(relative(0, 23 * 60).as_deref(), Some("23m ago"));
+        assert_eq!(relative(0, 3 * 3600).as_deref(), Some("3h ago"));
+        assert_eq!(relative(0, 86_399).as_deref(), Some("23h ago"));
+        assert_eq!(relative(0, 86_400), None);
     }
 
     #[test]
-    fn ancestors_follow_every_parent() {
-        let commit = |hash: &str, parents: &[&str]| Commit {
+    fn dates_older_than_a_day_are_short_dates() {
+        let mut old = commit("a", &[]);
+        old.short_date = "07.11.2026".into();
+        old.date = "07.11.2026 14:21:32".into();
+        assert_eq!(dates(&[old.clone()], &Config::default()), ["07.11.2026"]);
+        let absolute = Config { date_format: "absolute".into(), ..Default::default() };
+        assert_eq!(dates(&[old], &absolute), ["07.11.2026 14:21:32"]);
+    }
+
+    #[test]
+    fn the_author_shows_when_there_are_several() {
+        let by = |author: &str| Commit { author: author.into(), ..commit("a", &[]) };
+        assert!(!several_authors(&[]));
+        assert!(!several_authors(&[by("Ada")]));
+        assert!(!several_authors(&[by("Ada"), by("Ada")]));
+        assert!(several_authors(&[by("Ada"), by("Ada"), by("Bo")]));
+    }
+
+    fn commit(hash: &str, parents: &[&str]) -> Commit {
+        Commit {
             hash: hash.into(),
             parents: parents.iter().map(|p| p.to_string()).collect(),
             author: String::new(),
             email: String::new(),
             time: 0,
+            short_date: String::new(),
             date: String::new(),
             subject: String::new(),
             body: String::new(),
-        };
+        }
+    }
+
+    #[test]
+    fn ancestors_follow_every_parent() {
         let commits = [commit("x", &["a"]), commit("m", &["a", "b"]), commit("b", &["a"]), commit("a", &[])];
         let reached = ancestors(&commits, Some("m"));
         assert!(reached.contains("b") && reached.contains("a") && !reached.contains("x"));

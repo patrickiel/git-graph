@@ -23,7 +23,7 @@ Push, pull, fetch and deleting on a remote run in the background; a login git as
 | **Show remote branches** | Whether a new graph shows them (the Remotes button switches it per graph) |
 | **Show tags** | Include commits only tags reach |
 | **Show uncommitted changes** | The row on top for them |
-| **Date format** | `relative` (3d ago) or `absolute` |
+| **Date format** | `relative` (3h ago for the last day, then a short date in your locale) or `absolute` (date and time) |
 | **Dim commits HEAD doesn't reach** | Fade the commits that aren't ancestors of HEAD |
 
 ## How it works

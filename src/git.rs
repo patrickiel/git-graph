@@ -50,21 +50,26 @@ pub struct Commit {
     pub email: String,
     /// Seconds since 1970.
     pub time: i64,
-    /// As git formats it in local time.
+    /// The local date, in the user's locale.
+    pub short_date: String,
+    /// The local date and time, in the user's locale.
     pub date: String,
     pub subject: String,
     /// The message past its subject.
     pub body: String,
 }
 
-/// The date format the graph shows (git's `format-local`).
-const DATE: &str = "--date=format-local:%d %b %Y %H:%M";
+/// A full date and time as the graph shows it (git's `format-local`, whose
+/// `%x` and `%X` follow the user's locale).
+const DATE: &str = "--date=format-local:%x %X";
+/// [`DATE`] after the date alone, as two fields: a log's `%ad` fills both.
+const LOG_DATES: &str = "--date=format-local:%x\x1f%x %X";
 
 /// Up to `limit` commits of `revs`, newest first (children before parents).
 pub fn log(top: &Path, revs: &[String], limit: usize) -> Result<Vec<Commit>, String> {
     let count = format!("--max-count={limit}");
     let format = "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%ad%x1f%s%x1f%b%x1e";
-    let mut args = vec!["log", "--date-order", count.as_str(), format, DATE];
+    let mut args = vec!["log", "--date-order", count.as_str(), format, LOG_DATES];
     args.extend(revs.iter().map(String::as_str));
     args.push("--");
     match run(top, &args) {
@@ -90,6 +95,7 @@ pub fn parse_log(out: &str) -> Vec<Commit> {
                 author: f.next()?.to_string(),
                 email: f.next()?.to_string(),
                 time: f.next()?.trim().parse().unwrap_or(0),
+                short_date: f.next()?.to_string(),
                 date: f.next()?.to_string(),
                 subject: f.next().unwrap_or_default().trim_end().to_string(),
                 body: f.next().unwrap_or_default().trim().to_string(),
@@ -297,11 +303,13 @@ mod tests {
 
     #[test]
     fn parses_log_records() {
-        let out = "aaa\x1fbbb ccc\x1fAda\x1fada@x\x1f1700000000\x1f14 Nov 2023 22:13\x1fMerge it\x1e\nbbb\x1f\x1fBo\x1fbo@x\x1f1600000000\x1f13 Sep 2020 12:26\x1fFirst\x1e\n";
+        let out = "aaa\x1fbbb ccc\x1fAda\x1fada@x\x1f1700000000\x1f14.11.2023\x1f14.11.2023 22:13:00\x1fMerge it\x1e\nbbb\x1f\x1fBo\x1fbo@x\x1f1600000000\x1f13.09.2020\x1f13.09.2020 12:26:00\x1fFirst\x1e\n";
         let commits = parse_log(out);
         assert_eq!(commits.len(), 2);
         assert_eq!(commits[0].parents, ["bbb", "ccc"]);
         assert_eq!(commits[0].subject, "Merge it");
+        assert_eq!(commits[0].short_date, "14.11.2023");
+        assert_eq!(commits[0].date, "14.11.2023 22:13:00");
         assert!(commits[1].parents.is_empty());
         assert_eq!(commits[1].time, 1600000000);
     }
@@ -360,6 +368,7 @@ mod tests {
         git(&["tag", "-a", "v1", "-m", "release"]);
         let commits = log(&dir, &["--branches".into(), "--tags".into(), "HEAD".into()], 10).unwrap();
         assert_eq!(commits.iter().map(|c| c.subject.as_str()).collect::<Vec<_>>(), ["merge side", "second", "first"]);
+        assert!(!commits[0].short_date.is_empty() && commits[0].date.starts_with(&commits[0].short_date));
         let refs = refs(&dir).unwrap();
         assert!(refs.iter().any(|r| r.name == "v1" && r.target == commits[0].hash));
         assert_eq!(head(&dir).1.as_deref(), Some("main"));
